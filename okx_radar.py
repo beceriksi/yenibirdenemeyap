@@ -25,7 +25,6 @@ def send_telegram_message(message):
         print(f"Telegram mesajı gönderilemedi: {e}")
 
 def check_market():
-    # OKX Borsası Bağlantısı (Vadeli / Swap)
     exchange = ccxt.okx({
         'enableRateLimit': True,
         'options': {'defaultType': 'swap'}
@@ -33,17 +32,29 @@ def check_market():
     
     try:
         exchange.load_markets()
+        # Sadece USDT perpetual paritelerini al
         symbols = [s for s in exchange.symbols if s.endswith('/USDT:USDT')]
     except Exception as e:
         print(f"Piyasa verileri yüklenemedi: {e}")
         return
 
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {len(symbols)} adet OKX Vadeli paritesi taranıyor...")
+    # --- HİSSE SENEDİ VE ENDEKSLERİ ELEME FİLTRESİ ---
+    # Geleneksel borsa hisseleri, endeksler veya kripto olmayan varlıkların ticker'ları buraya eklenir.
+    stock_and_indices = ['NKE', 'OKTA', 'KR200', 'FWDI', 'DOOD', 'OPG', 'SKUU', 'VVV', 'ZKP']
+
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {len(symbols)} parite taranıyor (Hisseler filtreleniyor)...")
 
     signals_found = []
 
     for symbol in symbols:
         try:
+            # Örn: "BTC/USDT:USDT" -> Base varlığı ayıkla ("BTC")
+            base_currency = symbol.split('/')[0]
+            
+            # Eğer varlık hisse/endeks listesindeyse direkt atla
+            if base_currency in stock_and_indices:
+                continue
+
             ohlcv = exchange.fetch_ohlcv(symbol, timeframe='15m', limit=40)
             if len(ohlcv) < 40:
                 continue
@@ -76,7 +87,6 @@ def check_market():
                 except:
                     pass
 
-                # Bulunan sinyali listeye ekle
                 signals_found.append({
                     "symbol": symbol,
                     "volume_mult": f"{last_volume / avg_volume:.1f}",
@@ -84,20 +94,19 @@ def check_market():
                     "consolidation": f"{consolidation_range_pct:.2f}",
                     "fr": f"{fr_value:.4f}"
                 })
-                print(f"Sinyal sepete eklendi: {symbol}")
+                print(f"Kripto sinyali sepete eklendi: {symbol}")
                 
             time.sleep(exchange.rateLimit / 1000)
             
         except Exception as e:
             continue
 
-    # Tarama bittiğinde, eğer sinyal varsa TEK BİR MESAJDA gönder
     if signals_found:
         scan_time = datetime.now().strftime('%H:%M - %d.%m.%Y')
         message = (
-            f"🎯 *PROFESYONEL PATLAMA RADARI - ÖZET RAPOR*\n"
+            f"🎯 *KRİPTO PATLAMA RADARI - ÖZET RAPOR*\n"
             f"🕒 *Tarama Zamanı:* `{scan_time}`\n"
-            f"⚡ *Tespit Edilen Fırsat:* `{len(signals_found)} Adet`\n"
+            f"⚡ *Tespit Edilen Kripto Fırsatı:* `{len(signals_found)} Adet`\n"
             f"-----------------------------------\n\n"
         )
 
@@ -111,12 +120,12 @@ def check_market():
                 f"-----------------------------------\n"
             )
 
-        message += f"\n💡 *Analiz:* Yaylar sıkıştı, balinalar sessizce topluyor. Grafiklerini açıp tahtaları kontrol edin!"
+        message += f"\n💡 *Analiz:* Sadece gerçek kripto paralar filtrelenmiştir. Tahtaları kontrol edin!"
         
         send_telegram_message(message)
-        print("Özet rapor Telegram'a gönderildi.")
+        print("Kripto özet raporu Telegram'a gönderildi.")
     else:
-        print("Bu taramada hiçbir kriteri sağlayan coin bulunmadı (Rapor gönderilmedi).")
+        print("Bu taramada kriterlere uyan kripto coin bulunamadı.")
 
 if __name__ == "__main__":
     check_market()
